@@ -10,8 +10,8 @@ import {
 } from 'obsidian';
 
 import * as cheerio from 'cheerio'
-// Remember to rename these classes and interfaces!
-import hljs from 'highlight.js'
+var detectLang = require('lang-detector');
+
 
 interface MyPluginSettings {
   mySetting: string;
@@ -22,7 +22,6 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 }
 
 const SUPPORTED_LANGUAGES = [
-  "applescript",
   "xml",
   "bash",
   "c",
@@ -45,6 +44,7 @@ const SUPPORTED_LANGUAGES = [
   "yaml",
   "swift",
   "typescript",
+  "pascal"
 ]
 
 function prevent(evt: Event) {
@@ -110,16 +110,14 @@ export default class SmartDropPlugin extends Plugin {
 
     } else {
       console.log("text/plain", plain)
-      console.log("all langs:", hljs.listLanguages())
       if (plain.includes('\n') || plain.includes('\r')) {
+        const langRes = detectLang(plain, { statistics: true })
+        console.log("guessed language:", langRes)
 
-        const languageRes = hljs.highlightAuto(plain, SUPPORTED_LANGUAGES)
-        console.log("guessed language:", languageRes)
-
-        if (languageRes.language && languageRes.relevance > 10) {
+        if (langRes.detected != 'Unknown') {
             prevent(evt)
             editor.replaceSelection(
-              "```" + languageRes.language + "\n" +
+              "```" + langRes.detected + "\n" +
               plain +
               (plain.endsWith("\n") ? "" : "\n") +
               "```\n"
