@@ -4,7 +4,6 @@ import {
   htmlToMarkdown,
   MarkdownFileInfo,
   MarkdownView,
-  Notice,
   Plugin,
   PluginSettingTab,
   Setting
