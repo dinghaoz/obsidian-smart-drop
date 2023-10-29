@@ -5,12 +5,72 @@ import {
   MarkdownFileInfo,
   MarkdownView,
   Plugin,
-  PluginSettingTab,
-  Setting
+  PluginSettingTab, requestUrl,
+  Setting, TFile
 } from 'obsidian';
 
 import * as cheerio from 'cheerio'
+import * as path from "path";
+import {Arr} from "tern";
 var detectLang = require('lang-detector');
+const crypto = require('crypto');
+
+export const USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82  Safari/537.36';
+
+async function downloadImage(url: string): Promise<ArrayBuffer|null> {
+
+  const headers = {
+    'method': 'GET',
+    'User-Agent': USER_AGENT
+  }
+  console.log("download: ", url)
+  try {
+    const res = await requestUrl({ url: url, headers })
+    console.log("download response: ", res)
+    return res.arrayBuffer;
+  }
+  catch (e) {
+    console.log("download failed: ", e)
+    return null;
+  }
+}
+
+function splitFileExtension(filename: string) {
+  const lastDotIndex = filename.lastIndexOf('.');
+  if (lastDotIndex >= 0) {
+    const name = filename.slice(0, lastDotIndex);
+    const extension = filename.slice(lastDotIndex + 1);
+    return { name, extension };
+  } else {
+    // If there's no dot in the filename, assume no extension.
+    return { name: filename, extension: null };
+  }
+}
+
+export function normalizePath(path: string) {
+  return path.replace(/\\/g, "/");
+}
+
+export function md5Sig(contentData: ArrayBuffer) {
+  try {
+    var dec = new TextDecoder("utf-8");
+    const arrMid = Math.round(contentData.byteLength / 2);
+    const chunk = 15000;
+    const signature = crypto.createHash('md5').update([
+        contentData.slice(0, chunk),
+        contentData.slice(arrMid, arrMid + chunk),
+        contentData.slice(-chunk)
+      ].map(x => dec.decode(x)).join()
+    ).digest('hex')
+
+    return signature + "_MD5";
+  }
+  catch (e) {
+    return null;
+  }
+
+}
 
 
 interface MyPluginSettings {
@@ -20,32 +80,6 @@ interface MyPluginSettings {
 const DEFAULT_SETTINGS: MyPluginSettings = {
   mySetting: 'default'
 }
-
-const SUPPORTED_LANGUAGES = [
-  "xml",
-  "bash",
-  "c",
-  "cmake",
-  "cpp",
-  "csharp",
-  "dart",
-  "ruby",
-  "go",
-  "java",
-  "javascript",
-  "json",
-  "kotlin",
-  "latex",
-  "perl",
-  "objectivec",
-  "php",
-  "python",
-  "shell",
-  "yaml",
-  "swift",
-  "typescript",
-  "pascal"
-]
 
 function prevent(evt: Event) {
   if (!evt.defaultPrevented) {
@@ -84,8 +118,105 @@ export default class SmartDropPlugin extends Plugin {
     )
   }
 
+  private getAssetFolder(file: TFile): string|null {
+    const config = this.app.vault.getConfig('attachmentFolderPath')
+    if (config === '/' ){
+      return config
+    } else if (config === './'){
+      if (file.parent) {
+        return normalizePath(file.parent.path)
+      } else {
+        return null
+      }
+    } else if (config.match (/\.\/.+/g) !== null) {
+      if (file.parent) {
+        return normalizePath(path.join(file.parent.path, config.replace('\.\/','')))
+      } else {
+        return null
+      }
+    } else{
+      return normalizePath(config);
+    }
+  }
 
-  private async onEditorDataTransfer(evt: Event, dataTransfer: DataTransfer|null, editor: Editor, _: MarkdownView | MarkdownFileInfo) {
+  private async handleImageSrc(imgSrc: string, assetFolder: string, editor: Editor) {
+    const imgUrl = new URL(imgSrc)
+    if (imgUrl.protocol.startsWith("http")) {
+      await this.handleHttpImageSrc(imgSrc, assetFolder, editor)
+    } else if (imgUrl.protocol === 'data') {
+
+    } else if (imgUrl.protocol === 'file') {
+
+    } else if (imgUrl.protocol === 'app') {
+
+    }
+  }
+
+
+  private async handleHttpImageSrc(imgSrc: string, assetFolder: string, editor: Editor) {
+    const imgBuffer = await downloadImage(imgSrc)
+    console.log("downloaded img")
+    if (!imgBuffer) {
+      console.log("no buffer")
+      return
+    }
+
+    const imgUrl = new URL(imgSrc)
+    let filename = imgUrl.pathname.split('/').pop()
+    if (!filename) {
+      const md5 = md5Sig(imgBuffer)
+      if (!md5) {
+        console.log("failed to md5")
+        return
+      }
+      filename = md5
+    }
+
+    const localPath = await this.writeBinary(imgBuffer, filename, assetFolder)
+    if (localPath) {
+      editor.setValue(editor.getValue().replace(imgSrc, localPath))
+    }
+  }
+
+  private async writeBinary(buffer: ArrayBuffer, filename: string, folder: string): Promise<string | null> {
+    const {name, extension} = splitFileExtension(filename)
+
+    let md5: string|undefined|null = undefined
+    for (let i = 0; i < 100; i++) {
+      let filename = name
+      if (i > 0) {
+        filename = filename + `_${i}`
+      }
+
+      if (extension) {
+        filename = filename + `.${extension}`
+      }
+
+      const localPath = path.join(folder, filename)
+      if (!await this.app.vault.adapter.exists(localPath)) {
+        await this.app.vault.createBinary(localPath, buffer)
+        return localPath
+      } else {
+        const existing = await this.app.vault.adapter.readBinary(localPath)
+        if (md5 === undefined) {
+          md5 = md5Sig(buffer)
+          console.log("init md5", md5)
+        }
+
+        if (md5) {
+          const existingMd5 = md5Sig(existing)
+          console.log("existingMd5", existingMd5)
+          console.log("md5 == existingMd5", md5 == existingMd5)
+          if (md5 == existingMd5) {
+            return localPath
+          }
+        }
+      }
+    }
+    return null
+  }
+
+  private async onEditorDataTransfer(evt: Event, dataTransfer: DataTransfer|null, editor: Editor, viewOrFile: MarkdownView | MarkdownFileInfo) {
     if (!dataTransfer) { return }
 
 
@@ -98,13 +229,29 @@ export default class SmartDropPlugin extends Plugin {
       console.log("text/html", html)
 
       const $ = cheerio.load(html)
+      const file = viewOrFile.file
+      if (!file) { return }
 
+      const assetFolder = this.getAssetFolder(viewOrFile.file)
+      if (!assetFolder) { return }
+
+      console.log("ensure assetFolder: ", assetFolder)
+      try { await this.app.vault.createFolder(assetFolder) } catch (e) {}
+
+      let imgSrcList: string[] = []
       $("img").each((_, img) => {
-        console.log("src", $(img).attr("src"))
-        console.log("style", $(img).attr("style"))
+        const imgSrc = $(img).attr("src")
+        if (imgSrc && !imgSrcList.contains(imgSrc)) {
+          imgSrcList.push(imgSrc)
+        }
       })
-      prevent(evt)
-      editor.replaceSelection(htmlToMarkdown(html))
+
+      if (imgSrcList.length == 0) { return }
+      imgSrcList.forEach((imgSrc) => {
+        this.handleImageSrc(imgSrc, assetFolder, editor).catch((reason) => {
+          console.log("failed to handle %s", imgSrc, reason)
+        })
+      })
     } else if (uriList.length) {
       console.log("text/uri-list", uriList)
 
