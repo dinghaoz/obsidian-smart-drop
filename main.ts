@@ -14,7 +14,7 @@ import * as path from "path"
 var detectLang = require('lang-detector')
 const crypto = require('crypto')
 import isValidFilename from 'valid-filename'
-// import {fileTypeFromBuffer} from 'file-type'
+import {fileTypeFromBuffer} from 'file-type'
 
 export const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82  Safari/537.36';
@@ -189,12 +189,17 @@ export default class SmartDropPlugin extends Plugin {
       basename = md5
     }
 
+    const fileType = await fileTypeFromBuffer(buffer)
+    if (fileType) {
+      extension = fileType.ext
+    }
+
     if (!extension) {
-      // const fileType = await fileTypeFromBuffer(buffer)
-      // if (fileType) {
-      //   extension = fileType.ext
-      // }
       extension = "jpeg"
+    }
+
+    if (extension === 'apng') {
+      extension = 'png' // obsidian doesn't recognize apng
     }
 
     for (let i = 0; i < 100; i++) {
