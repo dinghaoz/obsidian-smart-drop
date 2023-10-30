@@ -25,6 +25,8 @@
 		"@types/cheerio": "^0.22.33",
 		"@types/underscore": "^1.11.12",
 		"cheerio": "^1.0.0-rc.12",
-		"underscore": "^1.13.6"
+		"file-type": "^18.5.0",
+		"underscore": "^1.13.6",
+		"valid-filename": "^4.0.0"
 	}
 }

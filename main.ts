@@ -10,10 +10,11 @@ import {
 } from 'obsidian';
 
 import * as cheerio from 'cheerio'
-import * as path from "path";
-import {Arr} from "tern";
-var detectLang = require('lang-detector');
-const crypto = require('crypto');
+import * as path from "path"
+var detectLang = require('lang-detector')
+const crypto = require('crypto')
+import isValidFilename from 'valid-filename'
+// import {fileTypeFromBuffer} from 'file-type'
 
 export const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82  Safari/537.36';
@@ -39,12 +40,16 @@ async function downloadImage(url: string): Promise<ArrayBuffer|null> {
 function splitFileExtension(filename: string) {
   const lastDotIndex = filename.lastIndexOf('.');
   if (lastDotIndex >= 0) {
-    const name = filename.slice(0, lastDotIndex);
+    const basename = filename.slice(0, lastDotIndex);
     const extension = filename.slice(lastDotIndex + 1);
-    return { name, extension };
+    if (extension.length > 5) {
+      return { basename: filename, extension: null}
+    } else {
+      return { basename, extension };
+    }
   } else {
     // If there's no dot in the filename, assume no extension.
-    return { name: filename, extension: null };
+    return { basename: filename, extension: null };
   }
 }
 
@@ -161,38 +166,48 @@ export default class SmartDropPlugin extends Plugin {
       return
     }
 
-    const imgUrl = new URL(imgSrc)
-    let filename = imgUrl.pathname.split('/').pop()
-    if (!filename) {
-      const md5 = md5Sig(imgBuffer)
-      if (!md5) {
-        console.log("failed to md5")
-        return
-      }
-      filename = md5
-    }
-
-    const localPath = await this.writeBinary(imgBuffer, filename, assetFolder)
+    const localPath = await this.writeBinary(imgBuffer, imgSrc, assetFolder)
+    console.log("localPath: ", localPath)
     if (localPath) {
       editor.setValue(editor.getValue().replace(imgSrc, localPath))
     }
   }
 
-  private async writeBinary(buffer: ArrayBuffer, filename: string, folder: string): Promise<string | null> {
-    const {name, extension} = splitFileExtension(filename)
-
+  private async writeBinary(buffer: ArrayBuffer, imgSrc: string, folder: string): Promise<string | null> {
+    const imgUrl = new URL(imgSrc)
+    const filename = imgUrl.pathname.split('/').pop()
     let md5: string|undefined|null = undefined
+
+    console.log("filename: ", filename)
+    let {basename, extension} = filename ? splitFileExtension(filename) : {basename: null, extension: null}
+    console.log("basename: ", basename)
+    console.log("extension: ", extension)
+
+    if (!basename || !isValidFilename(basename) || basename.length > 128) {
+      md5 = md5Sig(buffer)
+      if (!md5) { return null }
+      basename = md5
+    }
+
+    if (!extension) {
+      // const fileType = await fileTypeFromBuffer(buffer)
+      // if (fileType) {
+      //   extension = fileType.ext
+      // }
+      extension = "jpeg"
+    }
+
     for (let i = 0; i < 100; i++) {
-      let filename = name
+      let nameToWrite = basename
       if (i > 0) {
-        filename = filename + `_${i}`
+        nameToWrite = nameToWrite + `_${i}`
       }
 
       if (extension) {
-        filename = filename + `.${extension}`
+        nameToWrite = nameToWrite + `.${extension}`
       }
 
-      const localPath = path.join(folder, filename)
+      const localPath = path.join(folder, nameToWrite)
       if (!await this.app.vault.adapter.exists(localPath)) {
         await this.app.vault.createBinary(localPath, buffer)
         return localPath
