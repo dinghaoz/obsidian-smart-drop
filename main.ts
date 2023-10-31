@@ -144,10 +144,10 @@ export default class SmartDropPlugin extends Plugin {
     }
   }
 
-  private async handleImageSrc(imgSrc: string, assetFolder: string, editor: Editor) {
+  private async handleImageSrc(imgSrc: string, assetFolder: string, editor: Editor, file: TFile) {
     const imgUrl = new URL(imgSrc)
     if (imgUrl.protocol.startsWith("http")) {
-      await this.handleHttpImageSrc(imgSrc, assetFolder, editor)
+      await this.handleHttpImageSrc(imgSrc, assetFolder, editor, file)
     } else if (imgUrl.protocol === 'data') {
 
     } else if (imgUrl.protocol === 'file') {
@@ -157,8 +157,34 @@ export default class SmartDropPlugin extends Plugin {
     }
   }
 
+  private getLinkFromLocalPath(localPath: string, file: TFile): string {
+    const config = this.app.vault.getConfig('newLinkFormat')
+    console.log("newLinkFormat: ", config)
+    if (config === "relative") {
+      let parentPath = file.parent?.path
+      if (parentPath) {
+        parentPath = parentPath + path.sep
+        if (localPath.search(parentPath) == 0) {
+          return localPath.substring(parentPath.length)
+        } else {
+          return localPath
+        }
+      } else {
+        return localPath
+      }
+    } else if (config === "absolute") {
+      return localPath
+    } else { // "shortest"
+      const name = localPath.split(path.sep).pop()
+      if (name) {
+        return name
+      } else {
+        return localPath
+      }
+    }
+  }
 
-  private async handleHttpImageSrc(imgSrc: string, assetFolder: string, editor: Editor) {
+  private async handleHttpImageSrc(imgSrc: string, assetFolder: string, editor: Editor, file: TFile) {
     const imgBuffer = await downloadImage(imgSrc)
     console.log("downloaded img")
     if (!imgBuffer) {
@@ -168,8 +194,30 @@ export default class SmartDropPlugin extends Plugin {
 
     const localPath = await this.writeBinary(imgBuffer, imgSrc, assetFolder)
     console.log("localPath: ", localPath)
+
     if (localPath) {
-      editor.setValue(editor.getValue().replace(imgSrc, localPath))
+      const localLink = this.getLinkFromLocalPath(localPath, file)
+      const usesMDLink = this.app.vault.getConfig("useMarkdownLinks")
+      console.log("useMarkdownLinks: ", usesMDLink)
+
+      const regex = /!\[(?<text>[^\]]+)]\((?<url>[^)]+)\)/g
+      const doc = editor.getValue()
+      let newDoc = doc
+      let match
+      while ((match = regex.exec(doc)) !== null) {
+        const [full, text, url] = match
+        if (url === imgSrc) {
+          if (usesMDLink) {
+            newDoc = newDoc.replace(full, `![${text}](${encodeURI(localLink)})`)
+          } else {
+            newDoc = newDoc.replace(full, `![[${localLink}|${text}]]`)
+          }
+        }
+      }
+
+      if (newDoc != doc) {
+        editor.setValue(newDoc)
+      }
     }
   }
 
@@ -268,7 +316,7 @@ export default class SmartDropPlugin extends Plugin {
 
       if (imgSrcList.length == 0) { return }
       imgSrcList.forEach((imgSrc) => {
-        this.handleImageSrc(imgSrc, assetFolder, editor).catch((reason) => {
+        this.handleImageSrc(imgSrc, assetFolder, editor, file).catch((reason) => {
           console.log("failed to handle %s", imgSrc, reason)
         })
       })
