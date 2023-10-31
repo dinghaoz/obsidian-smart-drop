@@ -200,11 +200,14 @@ export default class SmartDropPlugin extends Plugin {
       const usesMDLink = this.app.vault.getConfig("useMarkdownLinks")
       console.log("useMarkdownLinks: ", usesMDLink)
 
-      const regex = /!\[(?<text>[^\]]+)]\((?<url>[^)]+)\)/g
+      const regex = /!\[(?<text>[^\]]*)]\((?<url>[^)]+)\)/g
       const doc = editor.getValue()
+
+      console.log("doc: ", doc)
       let newDoc = doc
       let match
-      while ((match = regex.exec(doc)) !== null) {
+      while (match = regex.exec(doc)) {
+        console.log("match: ", match)
         const [full, text, url] = match
         if (url === imgSrc) {
           if (usesMDLink) {
@@ -340,16 +343,6 @@ export default class SmartDropPlugin extends Plugin {
         }
       }
     }
-
-
-    // const markdown = htmlToMarkdown(html)
-    // console.log("markdown", markdown)
-    //
-    // editor.replaceSelection(markdown)
-    //
-    // const extractor = markdownLinkExtractor(markdown)
-    // console.log("links", extractor.links)
-    // console.log("anchor", extractor.anchors)
   }
 
 
