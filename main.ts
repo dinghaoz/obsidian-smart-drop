@@ -127,6 +127,7 @@ export default class SmartDropPlugin extends Plugin {
   private async onEditorDataTransfer(evt: Event, dataTransfer: DataTransfer|null, editor: Editor, viewOrFile: MarkdownView | MarkdownFileInfo) {
     if (!dataTransfer) { return }
 
+    console.log("clipboard: ", dataTransfer.types)
 
     const uriList = dataTransfer.getData("text/uri-list")
     const html = dataTransfer.getData("text/html")
