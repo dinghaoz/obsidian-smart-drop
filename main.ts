@@ -146,9 +146,16 @@ export default class SmartDropPlugin extends Plugin {
 
   private async handleImageSrc(imgSrc: string, assetFolder: string, editor: Editor, file: TFile) {
     const imgUrl = new URL(imgSrc)
-    if (imgUrl.protocol.startsWith("http")) {
+    console.log("img protocol: ", imgUrl.protocol)
+    if (imgUrl.protocol === "http:" || imgUrl.protocol === "https:") {
       await this.handleHttpImageSrc(imgSrc, assetFolder, editor, file)
-    } else if (imgUrl.protocol === 'data') {
+    } else if (imgUrl.protocol === 'data:') {
+      console.log("img path: ", imgUrl)
+      const regex = /image\/(?<format>\w+);base64,(?<base64>.+)/g
+      const match = imgUrl.pathname.match(regex)
+      if (!match) {return}
+      const [full, format, base64] = match
+      const buffer = Buffer.from(base64, 'base64')
 
     } else if (imgUrl.protocol === 'file') {
 
