@@ -58,6 +58,9 @@ export function preventEvent(evt: Event) {
 }
 
 export function replaceImgSrc(doc: string, imgSrc: string, localLink: string, usesMDLink: boolean): string | null {
+  console.log("doc: ", doc)
+  console.log("imgSrc: ", imgSrc)
+  console.log("localLink: ", usesMDLink)
   console.log("useMarkdownLinks: ", usesMDLink)
   const regex = /!\[(?<text>[^\]]*)]\((?<url>[^)]+)\)/g
 

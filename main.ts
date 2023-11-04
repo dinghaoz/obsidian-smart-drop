@@ -25,6 +25,7 @@ import {
   preventEvent, replaceImgSrc, promise
 } from './utils'
 import * as buffer from "buffer";
+import {EasyWorker} from "./easy-worker";
 
 interface MyPluginSettings {
   mySetting: string;
@@ -38,8 +39,12 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 export default class SmartDropPlugin extends Plugin {
   settings: MyPluginSettings;
 
+  worker: EasyWorker
+
   async onload() {
     await this.loadSettings();
+
+    this.worker = new EasyWorker([`const crypto = require("crypto");`])
 
     // This adds a status bar item to the bottom of the app. Does not work on mobile apps.
     const statusBarItemEl = this.addStatusBarItem();
@@ -114,9 +119,10 @@ export default class SmartDropPlugin extends Plugin {
 
     if (localPath) {
       const localLink = this.app.vault.getLinkFromLocalPath(localPath, file)
-      const usesMDLink = this.app.vault.getConfig("useMarkdownLinks")
+      const usesMDLink = this.app.vault.getConfig("useMarkdownLinks") ?? false
+      console.log("usesMDLink", usesMDLink)
 
-      const newDoc = await promise( () => replaceImgSrc(editor.getValue(), imgSrc, localLink, usesMDLink))
+      const newDoc = await this.worker.run(replaceImgSrc, editor.getValue(), imgSrc, localLink, usesMDLink)
       if (newDoc) {
         editor.setValue(newDoc)
       }
