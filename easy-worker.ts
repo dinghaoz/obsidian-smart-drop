@@ -1,5 +1,3 @@
-
-
 interface Output {
   id: number,
   result: any

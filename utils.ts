@@ -2,11 +2,6 @@ import * as crypto from "crypto"
 import {requestUrl} from "obsidian";
 
 
-export async function promise<T>(action: ()=>T): Promise<T> {
-  return new Promise<T>(resolve => {
-    resolve(action())
-  })
-}
 export function getFileHash(buffer: ArrayBuffer): string {
   return crypto.createHash('md5').update(Buffer.from(buffer)).digest('hex')
 }

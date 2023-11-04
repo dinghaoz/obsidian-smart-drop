@@ -1,24 +1,16 @@
 import {
-  App,
-  Editor,
-  htmlToMarkdown,
-  MarkdownFileInfo,
-  MarkdownView,
-  Plugin,
-  PluginSettingTab, requestUrl,
-  Setting, TFile, Vault
+  TFile, Vault
 } from 'obsidian'
 
-import {getFileHash, normalizePath, promise, splitFileExtension} from "./utils";
+import {normalizePath} from "./utils";
 import * as path from "path"
-import isValidFilename from "valid-filename";
 import {fileTypeFromBuffer} from "file-type";
 
 declare module 'obsidian' {
   export interface Vault {
     getAssetFolder(file: TFile): string|null
     getLinkFromLocalPath(localPath: string, file: TFile): string
-    writeBinary(buffer: ArrayBuffer, fileExtHint: string|null, folder: string): Promise<string|null>
+    writeBinary(buffer: ArrayBuffer, fileExtHint: string|null, folder: string, getFileHash: (buffer: ArrayBuffer) => Promise<string>): Promise<string|null>
   }
 }
 Vault.prototype.getAssetFolder = function (file: TFile) {
@@ -70,7 +62,7 @@ Vault.prototype.getLinkFromLocalPath = function (localPath: string, file: TFile)
 }
 
 
-Vault.prototype.writeBinary = async function (buffer: ArrayBuffer, fileExtHint: string|null, folder: string): Promise<string|null> {
+Vault.prototype.writeBinary = async function (buffer: ArrayBuffer, fileExtHint: string|null, folder: string, getFileHash: (buffer: ArrayBuffer) => Promise<string>): Promise<string|null> {
   let extension : string
   const fileType = await fileTypeFromBuffer(buffer)
   if (fileType) {
@@ -85,7 +77,7 @@ Vault.prototype.writeBinary = async function (buffer: ArrayBuffer, fileExtHint: 
     extension = 'png' // obsidian doesn't recognize apng
   }
 
-  const fileHash = await promise(() => getFileHash(buffer) )
+  const fileHash = await getFileHash(buffer)
 
   for (let i = 0; i < 100; i++) {
     let nameToWrite = fileHash
@@ -104,7 +96,7 @@ Vault.prototype.writeBinary = async function (buffer: ArrayBuffer, fileExtHint: 
     } else {
       const existing = await this.adapter.readBinary(localPath)
 
-        const existingHash = await promise(() => getFileHash(existing) )
+        const existingHash = await getFileHash(existing)
         console.log("existingHash", existingHash)
         console.log("md5 == existingHash", fileHash == existingHash)
         if (fileHash == existingHash) {

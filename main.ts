@@ -21,8 +21,7 @@ import {
   getFileHash,
   downloadImage,
   splitFileExtension,
-  normalizePath,
-  preventEvent, replaceImgSrc, promise
+  preventEvent, replaceImgSrc
 } from './utils'
 import * as buffer from "buffer";
 import {EasyWorker} from "./easy-worker";
@@ -114,7 +113,7 @@ export default class SmartDropPlugin extends Plugin {
   }
 
   private async convertLinks(buffer: ArrayBuffer, imgSrc:string, fileExtHint: string|null, folder: string, editor: Editor, file: TFile) {
-    const localPath = await this.app.vault.writeBinary(buffer, fileExtHint, folder)
+    const localPath = await this.app.vault.writeBinary(buffer, fileExtHint, folder, b => this.worker.run(getFileHash, b))
     console.log("localPath: ", localPath)
 
     if (localPath) {
