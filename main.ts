@@ -107,7 +107,7 @@ export default class SmartDropPlugin extends Plugin {
     if (!match) {return}
     const [full, format, base64] = match
 
-    const imgBuffer = await promise(() => Buffer.from(base64, 'base64'))
+    const imgBuffer = Buffer.from(base64, 'base64')
 
     await this.convertLinks(imgBuffer, imgSrc, format, assetFolder, editor, file)
   }
