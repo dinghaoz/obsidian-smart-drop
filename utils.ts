@@ -68,6 +68,14 @@ export function getLinkText(usesMDLink: boolean, localLink: string, title: strin
   }
 }
 
+export function getImageLinkWidth(imgWidth: number|null, target: number) {
+  if (imgWidth && imgWidth > target) {
+    return target
+  } else {
+    return null
+  }
+}
+
 export function replaceImgSrc(doc: string, imgSrc: string, usesMDLink: boolean, localLink: string, width: number|null): string | null {
 
   function getLinkText(usesMDLink: boolean, localLink: string, title: string, width: number|null) {
@@ -111,14 +119,9 @@ export function replaceImgSrc(doc: string, imgSrc: string, usesMDLink: boolean, 
 
 export async function convertToWebp(buffer: ArrayBuffer) {
   const fileType = await fileTypeFromBuffer(buffer)
-  return new Promise<ArrayBuffer>((resolve, reject) => {
+  return new Promise<{buffer: ArrayBuffer, width: number, height: number}>((resolve, reject) => {
     if (!fileType) {
       reject(Error("not image buffer"))
-      return
-    }
-
-    if (fileType.ext === 'webp') {
-      resolve(buffer)
       return
     }
 
@@ -142,7 +145,7 @@ export async function convertToWebp(buffer: ArrayBuffer) {
       context.drawImage(imageElement, 0, 0);
       canvas.toBlob((blob) => {
         if (blob) {
-          resolve(blob.arrayBuffer())
+          resolve(blob.arrayBuffer().then(buffer => ({buffer: buffer, width: canvas.width, height: canvas.height})))
         } else {
           reject(Error("Failed to get blob from canvas"))
         }
@@ -156,19 +159,20 @@ export async function convertToWebp(buffer: ArrayBuffer) {
 }
 
 
-export async function tryConvertToWebp(buffer: ArrayBuffer, fileExtHint: string|null): Promise<{buffer: ArrayBuffer, fileExtHint: string|null}> {
-  let theBuffer: ArrayBuffer
-  let theExtHint: string|null
+export async function tryConvertToWebp(buffer: ArrayBuffer, fileExtHint: string|null) {
   try {
-    theBuffer = await convertToWebp(buffer)
-    theExtHint = "webp"
+    const converted = await convertToWebp(buffer)
+    return {
+      ...converted,
+      fileExtHint: "webp"
+    }
   } catch (e) {
     console.error("WebP", e)
-    theBuffer = buffer
-    theExtHint = fileExtHint
-  }
-  return {
-    buffer: theBuffer,
-    fileExtHint: theExtHint
+    return  {
+      buffer: buffer,
+      width: null,
+      height: null,
+      fileExtHint: fileExtHint
+    }
   }
 }

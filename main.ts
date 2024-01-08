@@ -21,7 +21,7 @@ import {
   getFileHash,
   downloadImage,
   splitFileExtension,
-  preventEvent, replaceImgSrc, convertToWebp, tryConvertToWebp, getLinkText
+  preventEvent, replaceImgSrc, convertToWebp, tryConvertToWebp, getLinkText, getImageLinkWidth
 } from './utils'
 import * as buffer from "buffer";
 import {EasyWorker} from "./easy-worker";
@@ -123,7 +123,7 @@ export default class SmartDropPlugin extends Plugin {
       const usesMDLink = this.app.vault.getConfig("useMarkdownLinks") ?? false
       console.log("usesMDLink", usesMDLink)
 
-      const newDoc = await this.worker.run(replaceImgSrc, editor.getValue(), imgSrc, usesMDLink, localLink, 400)
+      const newDoc = await this.worker.run(replaceImgSrc, editor.getValue(), imgSrc, usesMDLink, localLink, getImageLinkWidth(converted.width, 400))
       if (newDoc) {
         editor.setValue(newDoc)
       }
@@ -192,7 +192,7 @@ export default class SmartDropPlugin extends Plugin {
           if (localPath) {
             const localLink = this.app.vault.getLinkFromLocalPath(localPath, file)
             const usesMDLink = this.app.vault.getConfig("useMarkdownLinks") ?? false
-            const linkText = getLinkText(usesMDLink, localLink, "", 400)
+            const linkText = getLinkText(usesMDLink, localLink, "", getImageLinkWidth(converted.width, 400))
             contents.push(linkText + '\n')
           }
         }
