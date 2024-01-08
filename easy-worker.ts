@@ -44,6 +44,7 @@ export class EasyWorker {
   async run<P0, P1, R>(func: (p0: P0, p1: P1)=>R, p0: P0, p1: P1): Promise<R>;
   async run<P0, P1, P2, R>(func: (p0: P0, p1: P1, p2: P2)=>R, p0: P0, p1: P1, p2: P2): Promise<R>;
   async run<P0, P1, P2, P3, R>(func: (p0: P0, p1: P1, p2: P2, p3: P3)=>R, p0: P0, p1: P1, p2: P2, p3: P3): Promise<R>;
+  async run<P0, P1, P2, P3, P4, R>(func: (p0: P0, p1: P1, p2: P2, p3: P3, p4: P4)=>R, p0: P0, p1: P1, p2: P2, p3: P3, p4: P4): Promise<R>;
 
   async run(func: Function, ...parameters: any): Promise<any> {
     const id = ++this.counter

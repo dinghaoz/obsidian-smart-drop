@@ -21,7 +21,7 @@ import {
   getFileHash,
   downloadImage,
   splitFileExtension,
-  preventEvent, replaceImgSrc
+  preventEvent, replaceImgSrc, convertToWebp, tryConvertToWebp, getLinkText
 } from './utils'
 import * as buffer from "buffer";
 import {EasyWorker} from "./easy-worker";
@@ -113,7 +113,9 @@ export default class SmartDropPlugin extends Plugin {
   }
 
   private async convertLinks(buffer: ArrayBuffer, imgSrc:string, fileExtHint: string|null, folder: string, editor: Editor, file: TFile) {
-    const localPath = await this.app.vault.writeBinary(buffer, fileExtHint, folder, b => this.worker.run(getFileHash, b))
+    console.log("convertLinks", imgSrc)
+    const converted = await tryConvertToWebp(buffer, fileExtHint)
+    const localPath = await this.app.vault.writeBinary(converted.buffer, converted.fileExtHint, folder, b => this.worker.run(getFileHash, b))
     console.log("localPath: ", localPath)
 
     if (localPath) {
@@ -121,7 +123,7 @@ export default class SmartDropPlugin extends Plugin {
       const usesMDLink = this.app.vault.getConfig("useMarkdownLinks") ?? false
       console.log("usesMDLink", usesMDLink)
 
-      const newDoc = await this.worker.run(replaceImgSrc, editor.getValue(), imgSrc, localLink, usesMDLink)
+      const newDoc = await this.worker.run(replaceImgSrc, editor.getValue(), imgSrc, usesMDLink, localLink, 400)
       if (newDoc) {
         editor.setValue(newDoc)
       }
@@ -137,22 +139,23 @@ export default class SmartDropPlugin extends Plugin {
     const uriList = dataTransfer.getData("text/uri-list")
     const html = dataTransfer.getData("text/html")
     const plain = dataTransfer.getData("text/plain")
+    const files = dataTransfer.files
 
+    const file = viewOrFile.file
+    if (!file) { return }
+
+    const assetFolder = this.app.vault.getAssetFolder(viewOrFile.file)
+    if (!assetFolder) { return }
 
     if (html.length) {
       console.log("text/html", html)
 
       const $ = cheerio.load(html)
-      const file = viewOrFile.file
-      if (!file) { return }
-
-      const assetFolder = this.app.vault.getAssetFolder(viewOrFile.file)
-      if (!assetFolder) { return }
 
       console.log("ensure assetFolder: ", assetFolder)
       try { await this.app.vault.createFolder(assetFolder) } catch (e) {}
 
-      let imgSrcList: string[] = []
+      const imgSrcList: string[] = []
       $("img").each((_, img) => {
         const imgSrc = $(img).attr("src")
         if (imgSrc && !imgSrcList.contains(imgSrc)) {
@@ -169,9 +172,35 @@ export default class SmartDropPlugin extends Plugin {
     } else if (uriList.length) {
       console.log("text/uri-list", uriList)
 
+    } else if (files.length) {
+
+      console.log("Files", files)
+      const imgFileList: File[] = []
+      for (let i=0; i<files.length; ++i) {
+        const file = files[i]
+        if (file.type.split('/')[0] === 'image') {
+          imgFileList.push(file)
+        }
+      }
+
+      if (imgFileList.length) {
+        evt.preventDefault()
+        const contents: string[] = []
+        for (const imgFile of imgFileList) {
+          const converted = await tryConvertToWebp(await imgFile.arrayBuffer(), splitFileExtension(imgFile.name).extension)
+          const localPath = await this.app.vault.writeBinary(converted.buffer, converted.fileExtHint, assetFolder, b => this.worker.run(getFileHash, b))
+          if (localPath) {
+            const localLink = this.app.vault.getLinkFromLocalPath(localPath, file)
+            const usesMDLink = this.app.vault.getConfig("useMarkdownLinks") ?? false
+            const linkText = getLinkText(usesMDLink, localLink, "", 400)
+            contents.push(linkText + '\n')
+          }
+        }
+        editor.replaceSelection(contents.join(''))
+      }
     } else {
       console.log("text/plain", plain)
-      if (plain.includes('\n') || plain.includes('\r')) {
+      if ((plain.includes('\n') || plain.includes('\r')) && !plain.includes('```')) {
         const langRes = detectLang(plain, { statistics: true })
         console.log("guessed language:", langRes)
 

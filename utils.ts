@@ -1,5 +1,6 @@
 import * as crypto from "crypto"
 import {requestUrl} from "obsidian";
+import {fileTypeFromBuffer} from "file-type";
 
 
 export function getFileHash(buffer: ArrayBuffer): string {
@@ -52,25 +53,52 @@ export function preventEvent(evt: Event) {
   }
 }
 
-export function replaceImgSrc(doc: string, imgSrc: string, localLink: string, usesMDLink: boolean): string | null {
+export function getLinkText(usesMDLink: boolean, localLink: string, title: string, width: number|null) {
+  const contents: string[] = []
+  if (title)
+    contents.push(title)
+  if (width)
+    contents.push(width.toString())
+
+  if (usesMDLink) {
+    return `![${contents.join('|')}](${encodeURI(localLink)})`
+  } else {
+    contents.unshift(localLink)
+    return `![[${contents.join('|')}]]`
+  }
+}
+
+export function replaceImgSrc(doc: string, imgSrc: string, usesMDLink: boolean, localLink: string, width: number|null): string | null {
+
+  function getLinkText(usesMDLink: boolean, localLink: string, title: string, width: number|null) {
+    const contents: string[] = []
+    if (title)
+      contents.push(title)
+    if (width)
+      contents.push(width.toString())
+
+    if (usesMDLink) {
+      return `![${contents.join('|')}](${encodeURI(localLink)})`
+    } else {
+      contents.unshift(localLink)
+      return `![[${contents.join('|')}]]`
+    }
+  }
+
   console.log("doc: ", doc)
   console.log("imgSrc: ", imgSrc)
-  console.log("localLink: ", usesMDLink)
+  console.log("localLink: ", localLink)
   console.log("useMarkdownLinks: ", usesMDLink)
-  const regex = /!\[(?<text>[^\]]*)]\((?<url>[^)]+)\)/g
+  const regex = /!\[(?<title>[^\]]*)]\((?<url>[^)]+)\)/g
 
   console.log("doc: ", doc)
   let newDoc = doc
   let match
   while (match = regex.exec(doc)) {
     console.log("match: ", match)
-    const [full, text, url] = match
+    const [full, title, url] = match
     if (url === imgSrc) {
-      if (usesMDLink) {
-        newDoc = newDoc.replace(full, `![${text}](${encodeURI(localLink)})`)
-      } else {
-        newDoc = newDoc.replace(full, `![[${localLink}|${text}]]`)
-      }
+      newDoc = newDoc.replace(full, getLinkText(usesMDLink, localLink, title, width))
     }
   }
 
@@ -78,5 +106,69 @@ export function replaceImgSrc(doc: string, imgSrc: string, localLink: string, us
     return newDoc
   } else {
     return null
+  }
+}
+
+export async function convertToWebp(buffer: ArrayBuffer) {
+  const fileType = await fileTypeFromBuffer(buffer)
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    if (!fileType) {
+      reject(Error("not image buffer"))
+      return
+    }
+
+    if (fileType.ext === 'webp') {
+      resolve(buffer)
+      return
+    }
+
+    const blob = new Blob( [ buffer ], { type: fileType.mime } )
+    const urlCreator = window.URL || window.webkitURL
+    const imageUrl = urlCreator.createObjectURL(blob)
+
+    const imageElement = new Image()
+
+    imageElement.onload = () => {
+
+      const canvas = document.createElement('canvas')
+      canvas.width = imageElement.naturalWidth
+      canvas.height = imageElement.naturalHeight
+      const context = canvas.getContext('2d')
+      if (!context) {
+        reject(Error("Failed to get canvas context"))
+        return
+      }
+
+      context.drawImage(imageElement, 0, 0);
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob.arrayBuffer())
+        } else {
+          reject(Error("Failed to get blob from canvas"))
+        }
+
+      }, 'image/webp');
+
+    };
+
+    imageElement.src = imageUrl
+  })
+}
+
+
+export async function tryConvertToWebp(buffer: ArrayBuffer, fileExtHint: string|null): Promise<{buffer: ArrayBuffer, fileExtHint: string|null}> {
+  let theBuffer: ArrayBuffer
+  let theExtHint: string|null
+  try {
+    theBuffer = await convertToWebp(buffer)
+    theExtHint = "webp"
+  } catch (e) {
+    console.error("WebP", e)
+    theBuffer = buffer
+    theExtHint = fileExtHint
+  }
+  return {
+    buffer: theBuffer,
+    fileExtHint: theExtHint
   }
 }
