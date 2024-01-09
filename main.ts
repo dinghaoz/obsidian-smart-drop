@@ -98,7 +98,7 @@ export default class SmartDropPlugin extends Plugin {
 
   private async convertSelectedToWebP(localLink: string, editor: Editor, viewOrFile: MarkdownView | MarkdownFileInfo) {
     const name = localLink.split(path.sep).pop()
-    const attachedFiles = this.app.vault.getFiles().filter(f => f.name === name)
+    const attachedFiles = this.app.vault.getFiles().filter(f => f.name === name || encodeURI(f.name) === name)
 
     if (attachedFiles.length > 0) {
       attachedFiles.sort((a, b) => Math.abs(a.path.length - localLink.length) - Math.abs(b.path.length - localLink.length))
