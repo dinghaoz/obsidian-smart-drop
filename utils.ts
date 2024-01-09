@@ -76,6 +76,29 @@ export function getImageLinkWidth(imgWidth: number|null, target: number) {
   }
 }
 
+const MDLINK_PATTERN = /!\[(?<title>[^\]]*)]\((?<url>[^)]+)\)/
+const WIKI_PATTERN = /!\[\[(?<url>[^\]|]*).*?]]/
+
+export function extractInternalLink(text: string) {
+  let match
+  while (match = MDLINK_PATTERN.exec(text)) {
+    const [full, title, url] = match
+    return {
+      full: full,
+      url: url
+    }
+  }
+
+  while (match = WIKI_PATTERN.exec(text)) {
+    const [full, url] = match
+    return {
+      full: full,
+      url: url
+    }
+  }
+  return null
+}
+
 export function replaceImgSrc(doc: string, imgSrc: string, usesMDLink: boolean, localLink: string, width: number|null): string | null {
 
   function getLinkText(usesMDLink: boolean, localLink: string, title: string, width: number|null) {

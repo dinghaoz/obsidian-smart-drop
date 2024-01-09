@@ -3,10 +3,10 @@ import {
   Editor,
   htmlToMarkdown,
   MarkdownFileInfo,
-  MarkdownView,
+  MarkdownView, Menu, Notice,
   Plugin,
   PluginSettingTab, requestUrl,
-  Setting, TFile
+  Setting, TFile, Vault
 } from 'obsidian';
 
 import * as cheerio from 'cheerio'
@@ -21,10 +21,12 @@ import {
   getFileHash,
   downloadImage,
   splitFileExtension,
-  preventEvent, replaceImgSrc, convertToWebp, tryConvertToWebp, getLinkText, getImageLinkWidth
+  preventEvent, replaceImgSrc, convertToWebp, tryConvertToWebp, getLinkText, getImageLinkWidth, extractInternalLink
 } from './utils'
 import * as buffer from "buffer";
 import {EasyWorker} from "./easy-worker";
+import {readFileSync} from "fs";
+import * as fs from "fs";
 
 interface MyPluginSettings {
   mySetting: string;
@@ -33,6 +35,8 @@ interface MyPluginSettings {
 const DEFAULT_SETTINGS: MyPluginSettings = {
   mySetting: 'default'
 }
+
+
 
 
 export default class SmartDropPlugin extends Plugin {
@@ -54,21 +58,68 @@ export default class SmartDropPlugin extends Plugin {
     this.addSettingTab(new SampleSettingTab(this.app, this));
 
 
-    this.app.workspace.on(
+    this.registerEvent(this.app.workspace.on(
       "editor-paste",
       (evt: ClipboardEvent, editor: Editor, info: MarkdownView | MarkdownFileInfo) => {
         console.log("editor-past")
         this.onEditorDataTransfer(evt, evt.clipboardData, editor, info)
       }
-    )
+    ))
 
-    this.app.workspace.on(
+    this.registerEvent(this.app.workspace.on(
       "editor-drop",
       (evt: DragEvent, editor: Editor, info: MarkdownView | MarkdownFileInfo) => {
         console.log("editor-drop")
         this.onEditorDataTransfer(evt, evt.dataTransfer, editor, info)
       }
-    )
+    ))
+
+
+    this.registerEvent(this.app.workspace.on(
+      "editor-menu",
+      (menu: Menu, editor: Editor, viewOrFile: MarkdownView | MarkdownFileInfo) => {
+        const selection = editor.getSelection()
+        console.log("selection", selection)
+        const extracted = extractInternalLink(selection)
+        console.log("extracted", extracted)
+        if (extracted && selection.trim() === extracted.full) {
+          const ext = splitFileExtension(extracted.url).extension
+          if (ext && ['png', 'jpg', 'jpeg'].includes(ext.toLowerCase())) {
+            menu.addItem(item => {
+              item.setTitle("to webp").onClick(evt => {
+                this.convertSelectedToWebP(extracted.url, editor, viewOrFile).catch(e => new Notice(e.toString()))
+              })
+            })
+          }
+        }
+      }
+    ))
+  }
+
+  private async convertSelectedToWebP(localLink: string, editor: Editor, viewOrFile: MarkdownView | MarkdownFileInfo) {
+    const name = localLink.split(path.sep).pop()
+    const attachedFiles = this.app.vault.getFiles().filter(f => f.name === name)
+
+    if (attachedFiles.length > 0) {
+      attachedFiles.sort((a, b) => Math.abs(a.path.length - localLink.length) - Math.abs(b.path.length - localLink.length))
+      const attached = attachedFiles[0]
+      console.log("attached", attached)
+      const noteFile = viewOrFile.file
+      if (!noteFile) { return }
+
+      const assetFolder = this.app.vault.getAssetFolder(viewOrFile.file)
+      if (!assetFolder) { return }
+
+
+      const buffer = await this.app.vault.adapter.readBinary(attached.path)
+      const linkText = await this.tryConvertImageFileToWebP(buffer, attached.extension, assetFolder, noteFile)
+      if (linkText) {
+        editor.replaceSelection(linkText)
+      }
+
+    } else {
+      throw Error("No file found!")
+    }
   }
 
   private async handleImageSrc(imgSrc: string, assetFolder: string, editor: Editor, file: TFile) {
@@ -130,6 +181,17 @@ export default class SmartDropPlugin extends Plugin {
     }
   }
 
+  async tryConvertImageFileToWebP(imgFileBuffer: ArrayBuffer, fileExtHint: string|null, assetFolder: string, noteFile: TFile): Promise<string|null> {
+    const converted = await tryConvertToWebp(imgFileBuffer, fileExtHint)
+    const localPath = await this.app.vault.writeBinary(converted.buffer, converted.fileExtHint, assetFolder, b => this.worker.run(getFileHash, b))
+    if (localPath) {
+      const localLink = this.app.vault.getLinkFromLocalPath(localPath, noteFile)
+      const usesMDLink = this.app.vault.getConfig("useMarkdownLinks") ?? false
+      return getLinkText(usesMDLink, localLink, "", getImageLinkWidth(converted.width, 400))
+    } else {
+      return null
+    }
+  }
 
   private async onEditorDataTransfer(evt: Event, dataTransfer: DataTransfer|null, editor: Editor, viewOrFile: MarkdownView | MarkdownFileInfo) {
     if (!dataTransfer) { return }
@@ -187,12 +249,8 @@ export default class SmartDropPlugin extends Plugin {
         evt.preventDefault()
         const contents: string[] = []
         for (const imgFile of imgFileList) {
-          const converted = await tryConvertToWebp(await imgFile.arrayBuffer(), splitFileExtension(imgFile.name).extension)
-          const localPath = await this.app.vault.writeBinary(converted.buffer, converted.fileExtHint, assetFolder, b => this.worker.run(getFileHash, b))
-          if (localPath) {
-            const localLink = this.app.vault.getLinkFromLocalPath(localPath, file)
-            const usesMDLink = this.app.vault.getConfig("useMarkdownLinks") ?? false
-            const linkText = getLinkText(usesMDLink, localLink, "", getImageLinkWidth(converted.width, 400))
+          const linkText = await this.tryConvertImageFileToWebP(await imgFile.arrayBuffer(), splitFileExtension(imgFile.name).extension, assetFolder, file)
+          if (linkText) {
             contents.push(linkText + '\n')
           }
         }
