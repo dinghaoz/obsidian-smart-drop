@@ -21,11 +21,17 @@ import {
   getFileHash,
   downloadImage,
   splitFileExtension,
-  preventEvent, replaceImgSrc, convertToWebp, tryConvertToWebp, getLinkText, getImageLinkWidth, extractInternalLink
+  preventEvent,
+  replaceImgSrc,
+  convertToWebp,
+  tryConvertToWebp,
+  getLinkText,
+  getImageLinkWidth,
+  extractInternalLink,
+  fileUriToPath
 } from './utils'
-import * as buffer from "buffer";
 import {EasyWorker} from "./easy-worker";
-import {readFileSync} from "fs";
+
 import * as fs from "fs";
 
 interface MyPluginSettings {
@@ -112,7 +118,7 @@ export default class SmartDropPlugin extends Plugin {
 
 
       const buffer = await this.app.vault.adapter.readBinary(attached.path)
-      const linkText = await this.tryConvertImageFileToWebP(buffer, attached.extension, assetFolder, noteFile)
+      const linkText = await this.tryConvertImageFileToWebP(buffer, attached.extension, assetFolder, noteFile, null)
       if (linkText) {
         editor.replaceSelection(linkText)
       }
@@ -181,13 +187,13 @@ export default class SmartDropPlugin extends Plugin {
     }
   }
 
-  async tryConvertImageFileToWebP(imgFileBuffer: ArrayBuffer, fileExtHint: string|null, assetFolder: string, noteFile: TFile): Promise<string|null> {
+  async tryConvertImageFileToWebP(imgFileBuffer: ArrayBuffer, fileExtHint: string|null, assetFolder: string, noteFile: TFile, targetWidth: number|null): Promise<string|null> {
     const converted = await tryConvertToWebp(imgFileBuffer, fileExtHint)
     const localPath = await this.app.vault.writeBinary(converted.buffer, converted.fileExtHint, assetFolder, b => this.worker.run(getFileHash, b))
     if (localPath) {
       const localLink = this.app.vault.getLinkFromLocalPath(localPath, noteFile)
       const usesMDLink = this.app.vault.getConfig("useMarkdownLinks") ?? false
-      return getLinkText(usesMDLink, localLink, "", getImageLinkWidth(converted.width, 400))
+      return getLinkText(usesMDLink, localLink, "", targetWidth ? getImageLinkWidth(converted.width, targetWidth): null)
     } else {
       return null
     }
@@ -233,7 +239,32 @@ export default class SmartDropPlugin extends Plugin {
       })
     } else if (uriList.length) {
       console.log("text/uri-list", uriList)
+      const filePathList = uriList.split(/\r|\n/)
+        .filter(l => !l.startsWith("#") && l.length>0)
+        .map(uri => fileUriToPath(uri))
+        .filter(p => {
+          const ext = splitFileExtension(p).extension?.toLowerCase()
+          return ext && ['png', 'jpg', 'jpeg']
+        })
 
+      if (filePathList.length) {
+        evt.preventDefault()
+
+        const contents: string[] = []
+
+        for (const filePath of filePathList) {
+          const buffer = await fs.promises.readFile(filePath)
+          const type = await fileTypeFromBuffer(buffer)
+          if (type && type.mime.split('/')[0] === 'image') {
+
+            const linkText = await this.tryConvertImageFileToWebP(buffer, type.ext, assetFolder, file, 400)
+            if (linkText) {
+              contents.push(linkText + '\n')
+            }
+          }
+        }
+        editor.replaceSelection(contents.join(''))
+      }
     } else if (files.length) {
 
       console.log("Files", files)
@@ -249,7 +280,7 @@ export default class SmartDropPlugin extends Plugin {
         evt.preventDefault()
         const contents: string[] = []
         for (const imgFile of imgFileList) {
-          const linkText = await this.tryConvertImageFileToWebP(await imgFile.arrayBuffer(), splitFileExtension(imgFile.name).extension, assetFolder, file)
+          const linkText = await this.tryConvertImageFileToWebP(await imgFile.arrayBuffer(), splitFileExtension(imgFile.name).extension, assetFolder, file, 400)
           if (linkText) {
             contents.push(linkText + '\n')
           }
