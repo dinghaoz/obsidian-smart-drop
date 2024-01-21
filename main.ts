@@ -33,6 +33,7 @@ import {
 import {EasyWorker} from "./easy-worker";
 
 import * as fs from "fs";
+import getPageTitle from "./scraper";
 
 interface MyPluginSettings {
   mySetting: string;
@@ -42,7 +43,15 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
   mySetting: 'default'
 }
 
-
+function createBlockHash(): string {
+  let result = "";
+  var characters = "abcdefghijklmnopqrstuvwxyz0123456789";
+  var charactersLength = characters.length;
+  for (var i = 0; i < 4; i++) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+  }
+  return result;
+}
 
 
 export default class SmartDropPlugin extends Plugin {
@@ -289,7 +298,9 @@ export default class SmartDropPlugin extends Plugin {
       }
     } else {
       console.log("text/plain", plain)
-      if ((plain.includes('\n') || plain.includes('\r')) && !plain.includes('```')) {
+      if (plain.includes('```')) return
+
+      if ((plain.includes('\n') || plain.includes('\r'))) {
         const langRes = detectLang(plain, { statistics: true })
         console.log("guessed language:", langRes)
 
@@ -301,6 +312,39 @@ export default class SmartDropPlugin extends Plugin {
               (plain.endsWith("\n") ? "" : "\n") +
               "```\n"
             )
+        }
+      } else {
+        try {
+          const url = new URL(plain)
+          if (url && (url.host.includes('youtube') || url.host.includes('bilibili'))) {
+            preventEvent(evt)
+
+            const hash = createBlockHash()
+            const titlePlaceholder = `Fetching Title...(${hash})`
+
+            let content = ""
+            content += [
+              "```video-note",
+              `title: ${titlePlaceholder}`,
+              `url: ${url}`,
+              "```"
+            ].join('\n') + '\n'
+
+            editor.replaceSelection(content)
+
+            getPageTitle(plain).then(t => {
+              let title = t ?? "Failed"
+              title = title.replace(':', ' ')
+              title = title.split("|").first() ?? title
+
+              const savedCursor = editor.getCursor()
+              editor.setValue(editor.getValue().replace(titlePlaceholder, title))
+
+              editor.setCursor(savedCursor)
+            })
+          }
+        } catch (e) {
+
         }
       }
     }

@@ -89,6 +89,10 @@ Vault.prototype.writeBinary = async function (buffer: ArrayBuffer, fileExtHint: 
       nameToWrite = nameToWrite + `.${extension}`
     }
 
+    if (!await this.adapter.exists(folder)) {
+      await this.createFolder(folder)
+    }
+
     const localPath = path.join(folder, nameToWrite)
     if (!await this.adapter.exists(localPath)) {
       await this.createBinary(localPath, buffer)
