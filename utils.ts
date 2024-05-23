@@ -184,7 +184,7 @@ export async function convertToWebp(buffer: ArrayBuffer) {
 
 export async function tryConvertToWebp(buffer: ArrayBuffer, fileExtHint: string|null) {
   try {
-    if (fileExtHint === 'svg' || fileExtHint === 'webp') {
+    if (fileExtHint === 'svg' || fileExtHint === 'webp' || fileExtHint === 'gif') {
       return  {
         buffer: buffer,
         width: null,

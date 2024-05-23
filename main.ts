@@ -253,7 +253,7 @@ export default class SmartDropPlugin extends Plugin {
         .map(uri => fileUriToPath(uri))
         .filter(p => {
           const ext = splitFileExtension(p).extension?.toLowerCase()
-          return ext && ['png', 'jpg', 'jpeg']
+          return ext && ['png', 'jpg', 'jpeg', 'gif', 'webp']
         })
 
       if (filePathList.length) {
