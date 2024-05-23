@@ -186,7 +186,7 @@ export default class SmartDropPlugin extends Plugin {
 
     if (localPath) {
       const localLink = this.app.vault.getLinkFromLocalPath(localPath, file)
-      const usesMDLink = this.app.vault.getConfig("useMarkdownLinks") ?? false
+      const usesMDLink = (this.app.vault as any).getConfig("useMarkdownLinks") ?? false
       console.log("usesMDLink", usesMDLink)
 
       const newDoc = await this.worker.run(replaceImgSrc, editor.getValue(), imgSrc, usesMDLink, localLink, getImageLinkWidth(converted.width, 400))
@@ -201,7 +201,7 @@ export default class SmartDropPlugin extends Plugin {
     const localPath = await this.app.vault.writeBinary(converted.buffer, converted.fileExtHint, assetFolder, b => this.worker.run(getFileHash, b))
     if (localPath) {
       const localLink = this.app.vault.getLinkFromLocalPath(localPath, noteFile)
-      const usesMDLink = this.app.vault.getConfig("useMarkdownLinks") ?? false
+      const usesMDLink = (this.app.vault as any).getConfig("useMarkdownLinks") ?? false
       return getLinkText(usesMDLink, localLink, "", targetWidth ? getImageLinkWidth(converted.width, targetWidth): null)
     } else {
       return null
